@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>記憶翻牌遊戲 (日常用品)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #d1d1c7;
+            overflow: hidden; 
+            user-select: none;
+        }
+        .perspective {
+            perspective: 1000px;
+        }
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+            cursor: pointer;
+        }
+        .card-flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 1.5rem;
+            border: 4px solid #4a554a;
+        }
+        /* 牌背：數字極大化 */
+        .card-back {
+            background: linear-gradient(135deg, #9abdbd 0%, #7da8a8 100%);
+            color: #ffffff;
+            font-size: clamp(3.5rem, 12vw, 7rem); 
+            font-weight: 900;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+        }
+        /* 牌面：極大圖案 */
+        .card-front {
+            background-color: #ffffff;
+            transform: rotateY(180deg);
+        }
+        
+        .card-icon {
+            font-size: clamp(4.5rem, 18vw, 9rem);
+            line-height: 1;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+        }
+
+        /* 配對成功樣式 */
+        .is-matched .card-front {
+            background-color: #f8faf8;
+            border-color: #38a169;
+        }
+        .matched-anim {
+            animation: pulse 0.5s ease-in-out;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1) rotateY(180deg); }
+            50% { transform: scale(1.1) rotateY(180deg); }
+            100% { transform: scale(1) rotateY(180deg); }
+        }
+
+        /* 提示文字 */
+        .instructor-hint {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px 24px;
+            border-radius: 30px;
+            font-size: 1rem;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center p-4 font-sans text-slate-800" ondblclick="manualResetCards()">
+
+    <!-- 頂部控制欄 -->
+    <div class="bg-white/70 p-5 rounded-3xl shadow-lg border border-white/40 text-center mb-6 max-w-2xl w-full flex-shrink-0">
+        <h1 class="text-4xl font-black mb-4 tracking-wider text-slate-700">記憶翻牌遊戲</h1>
+        
+        <div class="flex items-center justify-center gap-4">
+            <select id="difficulty" class="bg-white border-2 border-slate-300 rounded-xl px-4 py-2 text-lg font-bold outline-none focus:ring-4 focus:ring-[#7da8a8]/50 cursor-pointer">
+                <option value="5">簡單 (10張)</option>
+                <option value="8" selected>一般 (16張)</option>
+                <option value="10">進階 (20張)</option>
+            </select>
+            <button id="start-btn" class="bg-[#7da8a8] hover:bg-[#6b9393] text-white px-10 py-2 rounded-xl shadow-md font-black transition-all active:scale-95 text-lg">
+                重新開始
+            </button>
+        </div>
+    </div>
+
+    <!-- 遊戲主區域 -->
+    <div id="game-container" class="flex-1 w-full max-w-7xl flex items-center justify-center overflow-hidden">
+        <div id="game-board" class="grid gap-6 w-full h-full max-h-[75vh] p-4">
+            <!-- JS 生成 -->
+        </div>
+    </div>
+
+    <div class="instructor-hint">💡 配對錯誤時，請連按畫面兩下翻回背面</div>
+
+    <!-- 獲勝畫面 -->
+    <div id="win-message" class="fixed inset-0 bg-black/80 flex items-center justify-center hidden z-50 backdrop-blur-md">
+        <div class="bg-white p-12 rounded-[3rem] shadow-2xl text-center max-w-md w-full mx-4 border-t-[12px] border-emerald-500">
+            <div class="text-8xl mb-6">🏆</div>
+            <h2 class="text-4xl font-black mb-6 text-slate-800">挑戰成功！</h2>
+            <button onclick="initGame()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-5 rounded-2xl transition-all shadow-xl active:scale-95 text-xl">
+                再玩一次
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 日常用品圖案池 (Emoji)
+        const ITEMS_POOL = ['⌚', '👓', '🌂', '☎️', '🔑', '👟', '🎒', '🪑', '🕯️', '🥣', '🧼', '🧺'];
+
+        let gameCards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let totalPairs = 8;
+        let isWaitingForReset = false;
+
+        const board = document.getElementById('game-board');
+        const difficultySelect = document.getElementById('difficulty');
+        const startBtn = document.getElementById('start-btn');
+        const winMessage = document.getElementById('win-message');
+
+        function shuffle(array) {
+            return array.sort(() => Math.random() - 0.5);
+        }
+
+        function initGame() {
+            matchedPairs = 0;
+            flippedCards = [];
+            isWaitingForReset = false;
+            winMessage.classList.add('hidden');
+            
+            totalPairs = parseInt(difficultySelect.value);
+
+            // 從日常用品池中隨機選出所需的對數
+            const selectedItems = shuffle([...ITEMS_POOL]).slice(0, totalPairs);
+            let cardData = [];
+            selectedItems.forEach((item) => {
+                cardData.push({ icon: item }, { icon: item });
+            });
+            gameCards = shuffle(cardData);
+
+            updateGridLayout();
+            renderBoard();
+        }
+
+        function updateGridLayout() {
+            const total = totalPairs * 2;
+            let cols = total <= 10 ? 5 : (total <= 16 ? 4 : 5);
+            if (window.innerWidth < 640) cols = 2; 
+            board.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+        }
+
+        function renderBoard() {
+            board.innerHTML = '';
+            gameCards.forEach((cardObj, index) => {
+                const card = document.createElement('div');
+                card.className = 'perspective h-full w-full min-h-0';
+                card.dataset.value = cardObj.icon;
+                
+                card.innerHTML = `
+                    <div class="card-inner h-full w-full" onclick="flipCard(this)">
+                        <div class="card-back">${index + 1}</div>
+                        <div class="card-front">
+                            <span class="card-icon">${cardObj.icon}</span>
+                        </div>
+                    </div>
+                `;
+                board.appendChild(card);
+            });
+        }
+
+        function flipCard(cardInner) {
+            const card = cardInner.parentElement;
+            
+            if (isWaitingForReset) return;
+            if (card.classList.contains('card-flipped') || card.classList.contains('is-matched')) return;
+
+            card.classList.add('card-flipped');
+            flippedCards.push(card);
+
+            if (flippedCards.length === 2) {
+                checkMatch();
+            }
+        }
+
+        function checkMatch() {
+            const [c1, c2] = flippedCards;
+            const isMatch = c1.dataset.value === c2.dataset.value;
+
+            if (isMatch) {
+                matchedPairs++;
+                c1.classList.add('is-matched');
+                c2.classList.add('is-matched');
+                c1.querySelector('.card-inner').classList.add('matched-anim');
+                c2.querySelector('.card-inner').classList.add('matched-anim');
+                flippedCards = [];
+                
+                if (matchedPairs === totalPairs) {
+                    setTimeout(showWin, 800);
+                }
+            } else {
+                // 不一致時鎖定牌面，等待雙擊畫面
+                isWaitingForReset = true;
+            }
+        }
+
+        // 帶領者控制：雙擊畫面任何地方，翻回錯誤的卡片
+        function manualResetCards() {
+            if (!isWaitingForReset) return;
+
+            flippedCards.forEach(card => {
+                card.classList.remove('card-flipped');
+            });
+            
+            flippedCards = [];
+            isWaitingForReset = false;
+        }
+
+        startBtn.addEventListener('click', initGame);
+        window.addEventListener('resize', updateGridLayout);
+        window.onload = initGame;
+    </script>
+</body>
+</html>
