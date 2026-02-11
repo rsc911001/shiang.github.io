@@ -1,9 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon.png"> 
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>49號大樂透機 & 賓果彩券</title>
@@ -32,15 +29,6 @@
             background: #fff;
             color: #c0392b;
             box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then((reg) => console.log('App 準備就緒!', reg.scope))
-        .catch((err) => console.log('App 設定失敗:', err));
-    });
-  }
-</script>
         }
 
         /* === 開獎機樣式 === */
